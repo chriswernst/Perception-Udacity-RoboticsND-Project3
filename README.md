@@ -42,7 +42,7 @@ And the dataset that powers it is now [**free and open to the public!**](https:/
 
 We operate PR2 through **ROS Kinetic** (ran through Linux Ubuntu 16.0) and commands are written in **Python**.
 
-The code driving this project and interacting with ROS can be found at `IK_server.py`
+The code driving this project and interacting with ROS can be found at `ToBeDetermined.py`
 
 *Quick note on naming convention:* `THIS_IS_A_CONSTANT` *and* `thisIsAVariable`
 
@@ -53,13 +53,47 @@ This **README** is broken into the following sections: **Environment Setup, Code
 ###
 
 ### Environment Setup
+If you don't already have the directory made:
+```sh
+$ mkdir -p ~/catkin_ws/src
+$ cd ~/catkin_ws/
+$ catkin_make
+```
+Then, clone the project repo:
+```sh
+$ cd ~/catkin_ws/src
+$ git clone https://github.com/udacity/RoboND-Perception-Project.git
+```
+Install missing dependencies:
+```sh
+$ cd ~/catkin_ws
+$ rosdep install --from-paths src --ignore-src --rosdistro=kinetic -y
+```
+Build it:
+```sh
+$ cd ~/catkin_ws
+$ catkin_make
+```
+Add the following to your `.bashrc` file:
+```
+export GAZEBO_MODEL_PATH=~/catkin_ws/src/RoboND-Perception-Project/pr2_robot/models:$GAZEBO_MODEL_PATH
+```
+And if it's not there already, also add this to `.bashrc`:
+```
+source ~/catkin_ws/devel/setup.bash
+```
+
 
 [Filtering and Segmentation Exercises](https://github.com/udacity/RoboND-Perception-Exercises)
 Using the `python-pcl` library, which can be invoked using `import pcl`
 
 [Point Cloud Library](http://www.pointclouds.org/)
 
+We'll be running the code through our linux distribution of ROS.
 
+`Robotic VM V2.0.1` is the directory that contains the Linux Boot image:`Ubuntu 64-bit Robo V2.0.1.ova`
+
+If prompted, the Linux system password is `robo-nd`
 
 ### Code Analysis
 
@@ -135,20 +169,25 @@ Outliers
 
 Used to statistically remove noise from the image.
 
+
+Much like the previous filters, we start by creating a filter object: 
 ```
-# Much like the previous filters, we start by creating a filter object: 
 outlier_filter = cloud_filtered.make_statistical_outlier_filter()
-
-# Set the number of neighboring points to analyze for any given point
+```
+Set the number of neighboring points to analyze for any given point
+```
 outlier_filter.set_mean_k(50)
-
-# Set threshold scale factor
+```
+Set threshold scale factor
+```
 x = 1.0
-
-# Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered outlier
+```
+Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered outlier
+```
 outlier_filter.set_std_dev_mul_thresh(x)
-
-# Finally call the filter function for magic
+```
+Finally call the filter function for magic
+```
 cloud_filtered = outlier_filter.filter()
 ```
 
@@ -203,11 +242,11 @@ DBSCAN datapoints **do not have to be spatial data; they can be color data, inte
 
 ##### Run the VM to test our filtering and segmentation code
 Downsampling, Passthrough, RANSAC plane fitting, extract inliers/outliers
-```
+```sh
 $ roslaunch sensor_stick robot_spawn.launch
 ```
 `segmentation.py` contains all of our filtering code. Run it with:
-```
+```sh
 $ ./segmentation.py
 ```
 When you click on topics in RViz, you should be able to only see this view when the `pcl_objects` topic is selected:
@@ -222,7 +261,7 @@ When you click on topics in RViz, you should be able to only see this view when 
 ###### HSV
 ###
 HSV can help us identify objects when the lighting conditions change on an RGB image. **Hue** is the color, **Saturation** is the color intensity, and **Value** is the brightness. A conversion from RGB to HSV can be done with `OpenCV`:
-```
+```py
 hsv_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
 ```
 ###
@@ -262,30 +301,169 @@ These **surface normal** histograms correspond to the following shapes:
 Scikit-Learn or `sklearn.svm.SVC` will help us implement the SVM algorithm. [Check this link out for documentation on scikit-learn](http://scikit-learn.org/stable/modules/classes.html#module-sklearn.svm)
 ###
 `svm.py` will house our SVM code and `generate_clusters.py` will help us create a random dataset.
-```
+```py
 svc = svm.SVC(kernel='linear').fit(X, y)
 ```
  The line above is the one doing the heavy lifting. The type of delineation can be changed. It must be one of ‘linear’, ‘poly’, ‘rbf’, ‘sigmoid’, ‘precomputed’ or a callable. [Read more here](http://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html).
 
 We also do some **SVM Image Classification**, and this can be found under `svm_image_classifer`.
 
-###### Recognition Exercise
+###### Recognition Exercise - Combining what we have learned!
 ###
+This is a very good(almost perfect) confusion matrix. Initially, ours will not come out this good.
 ![alt text](https://d17h27t6h515a5.cloudfront.net/topher/2017/August/59825df9_screen-shot-2017-08-02-at-4.18.53-pm/screen-shot-2017-08-02-at-4.18.53-pm.png)
 ###
-```
+```sh
 $ cd ~/catkin_ws
 $ roslaunch sensor_stick training.launch
 ```
 Once the environment is up, then:
-```
+```sh
 $ cd ~/catkin_ws
 $ rosrun sensor_stick capture_features.py
 ```
 The `capture_features.py` script should randomly place the 7 objects infront of the RGB-D camera and capture features about the items, then output `training_set.sav`
 
+Then, to generate the confusion matrix:
+```sh
+$ rosrun sensor_stick train_svm.py
+```
+As you can see, this is not a good confusion matrix. That's because the functions `compute_color_histograms()` and `compute_normal_histograms()`, in the file `features.py` is not appropriately filled out. 
+###
+You can find `features.py` in the directory:
+```
+~/catkin_ws/src/sensor_stick/src/sensor_stick/
+```
+First up, we'll alter the `compute_color_histograms()` function, which will do RGB color analysis on each point of the point cloud.
+```py
+def compute_color_histograms(cloud, using_hsv=False):
+
+    # Compute histograms for the clusters
+    point_colors_list = []
+
+    # Step through each point in the point cloud
+    for point in pc2.read_points(cloud, skip_nans=True):
+        rgb_list = float_to_rgb(point[3])
+        if using_hsv:
+            point_colors_list.append(rgb_to_hsv(rgb_list) * 255)
+        else:
+            point_colors_list.append(rgb_list)
+
+    # Populate lists with color values
+    channel_1_vals = []
+    channel_2_vals = []
+    channel_3_vals = []
+
+    for color in point_colors_list:
+        channel_1_vals.append(color[0])
+        channel_2_vals.append(color[1])
+        channel_3_vals.append(color[2])
+
+    nbins=32
+    bins_range=(0,256)
+    
+    # Compute histograms
+    r_hist = np.histogram(channel_1_vals, bins=nbins, range=bins_range)
+    g_hist = np.histogram(channel_2_vals, bins=nbins, range=bins_range)
+    b_hist = np.histogram(channel_3_vals, bins=nbins, range=bins_range)
+    
+    # Extract the features
+    # Concatenate and normalize the histograms
+    hist_features = np.concatenate((r_hist[0], g_hist[0], b_hist[0])).astype(np.float64)
+    normed_features = hist_features / np.sum(hist_features)  
+
+    return normed_features 
+```
+###
+###
+Next, we'll add the histogram, compute features, concatenate them, and normalize them for the **surface normals** function `compute_normal_histograms`:
+
+```py
+def compute_normal_histograms(normal_cloud):
+    norm_x_vals = []
+    norm_y_vals = []
+    norm_z_vals = []
+
+    for norm_component in pc2.read_points(normal_cloud,
+                                          field_names = ('normal_x', 'normal_y', 'normal_z'),
+                                          skip_nans=True):
+        norm_x_vals.append(norm_component[0])
+        norm_y_vals.append(norm_component[1])
+        norm_z_vals.append(norm_component[2])
 
 
+    nbins=32
+    bins_range=(0,256)
+    # TODO: Compute histograms of normal values (just like with color)
+
+    # Compute histograms
+    x_hist = np.histogram(norm_x_vals, bins=nbins, range=bins_range)
+    y_hist = np.histogram(norm_y_vals, bins=nbins, range=bins_range)
+    z_hist = np.histogram(norm_z_vals, bins=nbins, range=bins_range)
+    
+    # TODO: Concatenate and normalize the histograms
+    # Extract the features
+    # Concatenate and normalize the histograms
+    hist_features = np.concatenate((x_hist[0], y_hist[0], z_hist[0])).astype(np.float64)
+    normed_features = hist_features / np.sum(hist_features)  
+
+    return normed_features
+```
+###
+Now, we can relaunch the Gazebo environment, re-run the training and feature capture, then generate the confusion matrix:
+```sh
+$ cd ~/catkin_ws
+$ roslaunch sensor_stick training.launch
+```
+Once the environment is up, then:
+```sh
+$ cd ~/catkin_ws
+$ rosrun sensor_stick capture_features.py
+```
+Give it a minute or so to go through all 7 objects. Then: 
+```sh
+$ rosrun sensor_stick train_svm.py
+```
+The outputted confusion matrix should be better than the previous one. But there are still strategies to improve:
+**- Convert RGB to HSV**
+**- Compute features for a larger set of random orientations of the objects**
+**- Try different binning schemes with the histogram(32,64, etc)**
+**- Modify the SVM parameters(kernel, regularization, etc)**
+###
+
+To modify how many times each object is spawned randomly, look for the for loop in `capture_features.py` that begins with for i in range(5):. Increase this value to increase the number of times you capture features for each object.
+
+To use HSV, find the line in `capture_features.py` where you're calling `compute_color_histograms()` and change the flag to `using_hsv=True`.
+
+To mess with the SVM parameters, open up `train_svm.py` and find where you're defining your classifier. Check out the sklearn.svm docs to see what your options are there.
+
+After setting `using_hsv=true` and `bins=32`(which seems to be a sweet spot), I began playing with the other two features, **number of random orientations, and SVM kernel,** in order to improve the accuracy of my object classifier. Note, I didn't use poly, as it gave very low accuracy (17%).
+
+My results were as follows, with `using_hsv=true` and `bins=32`:
+- **64%** with SVM kernel=linear, orientations=7
+- **64%** with SVM kernel=rbf, orientations=10
+- **74%** with SVM kernel=linear, orientations=10
+- **79%** with SVM kernel=linear, orientations=20
+- **82%** with SVM kernel=sigmoid, orientations=20
+- **84%** with SVM kernel=rbf, orientations=20
+
+It seems as though our accuracy is improving with orientations increasing--which makes logical sense as we increase the sample size of the training set, our algorithm gets better. Let's continue increasing orientations exposed to the camera, to `40`:
+
+- **88%** with SVM kernel=sigmoid, orientations=40
+- **89%** with SVM kernel=linear, orientations=40
+- **90%** with SVM kernel=rbf, orientations=40
+
+And at `80` orientations per object:
+- **89%** with SVM kernel=sigmoid, orientations=80
+- **90%** with SVM kernel=rbf, orientations=80
+- **95%** with SVM kernel=linear, orientations=80
+
+Make sure you are in the directory where `model.sav` is located!
+```
+$ roslaunch sensor_stick robot_spawn.launch
+$ ./object_recognition.py
+
+```
 
 
 
