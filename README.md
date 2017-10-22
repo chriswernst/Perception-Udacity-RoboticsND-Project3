@@ -464,7 +464,13 @@ $ roslaunch sensor_stick robot_spawn.launch
 $ ./object_recognition.py
 
 ```
+###
 
+#### Putting it all together for our Project's Perception Pipeline
+
+In the previous exercises, we have built out much of our perception pipeline. Building on top of `object_recognition.py` we'll just have to add a new publisher for the RGB-D camera data, add noise filtering, and a few other items. Let's get started!
+
+You'll find `project_template.py` in the `/pr2_robot/scripts` directory. This will be our new location for our **primary project code**. Port in the code from `object_recognition.py` into the respective `TO DOs`.
 
 
 (***README IN PROGRESS***)
