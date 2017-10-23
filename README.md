@@ -42,7 +42,7 @@ And the dataset that powers it is now [**free and open to the public!**](https:/
 
 We operate PR2 through **ROS Kinetic** (ran through Linux Ubuntu 16.0) and commands are written in **Python**.
 
-The code driving this project and interacting with ROS can be found at `ToBeDetermined.py`
+The code driving this project and interacting with ROS can be found at `project_template.py`
 
 *Quick note on naming convention:* `THIS_IS_A_CONSTANT` *and* `thisIsAVariable`
 
@@ -462,15 +462,132 @@ Make sure you are in the directory where `model.sav` is located!
 ```
 $ roslaunch sensor_stick robot_spawn.launch
 $ ./object_recognition.py
-
 ```
 ###
-
+###
+###
+###
+###
 #### Putting it all together for our Project's Perception Pipeline
 
 In the previous exercises, we have built out much of our perception pipeline. Building on top of `object_recognition.py` we'll just have to add a new publisher for the RGB-D camera data, add noise filtering, and a few other items. Let's get started!
 
-You'll find `project_template.py` in the `/pr2_robot/scripts` directory. This will be our new location for our **primary project code**. Port in the code from `object_recognition.py` into the respective `TO DOs`.
+##### Filter and Segment the New Scene
+Since we have a new table environment, not all of our filters will be effective. I'm going to create a new file to replace `segmentation.py` that will help us filter and segment the new environment--I'll call it `pr2_segmentation.py`. Most of the code from `segmentaion.py` can just be copied over, but note the differences in the table height. This means we'll have to adjust the ***pass through filtering*** Z-axis minimum and maximum values. 
+
+For `axis-min` I'll try `0.2`(meters) and `1.1`(meters) for `axis-max`.
+
+We'll also want to publish our RGB-D camera data to a `ROS-topic` named `/pr2/world/points`. Following the syntax of other publishers/subscribers should help us out with this.
+
+Also, we'll have to deal with actual noise in this scene, so we'll apply what we learned earlier on and add in the statistical outlier remover to `pr2_segmentation.py` with:
+```py
+outlier_filter = cloud_filtered.make_statistical_outlier_filter()
+outlier_filter.set_mean_k(50)
+x = 1.0
+outlier_filter.set_std_dev_mul_thresh(x)
+cloud_filtered = outlier_filter.filter()
+```
+###
+
+This should leave `pr2_segmentation.py` just about ready to go, but to verify, we have the following items in the `pcl_callback(pcl_msg)` function:
+- **Convert ROS message to PCL** (goes from PC2 data to PCL pointXYZRGB)
+- **Voxel Grid Downsampling** (essentially reduce the resolution of our Point Cloud)
+- **Statistical Outlier Removal Filter** (gets rid of points that aren't apart of a group, determined by proximity)
+- **Pass Through Filtering** (a vertical cropping along the Z-axis that cuts down our Point Cloud)
+- **RANSAC Plane Segmentation** (helps find a plane - in this case the table)
+- **Extract Inliers and Outliers** (Create two point clouds from the RANSAC analysis)
+- **Euclidean Clustering/DBSCAN** (Calculates the distance to other points, and based on thresholds of proximity, combines groups of points into clusters that we assume are objects)
+- **Cluster Mask** (color each object differently so they are easily distinguished from one another)
+
+We'll then want to make sure this new point cloud is published with:
+```py
+pcl_cluster_pub = rospy.Publisher("/pcl_world", PointCloud2, queue_size=1)
+```
+###
+To test everything out, open a new terminal in the ROS system, and type:
+```sh
+$ cd ~/catkin_ws/
+$ roslaunch pr2_robot pick_place_project.launch
+```
+Give the PR2 a moment to visualize and map its surroundings. Once it's finished, type:
+```sh
+$ cd ~/catkin_ws/src/RoboND-Perception-Project/pr2_robot/scripts/
+$ ./pr2_segmentation.py
+```
+You should now be able to go into RViz and click on the new ROS topics:`pcl_world` which is our filtered, segmented, and colored group of objects; and `pr2/world/points` which is the data coming from our PR2's RGB-D camera.
+
+With this done, and once you are happy with the results, you can transfer the code. You'll find `project_template.py` in the `/pr2_robot/scripts` directory. This will be our new location for our **primary project code**. Port in the code from `pr2_segmentation.py`  and`object_recognition.py` into the respective `TO DOs`.
+###
+##### Capture Features of the New Objects
+Just like we did in the lecture exercise, we need to capture the features of the objects that we will need to find in the project (essentially photograph them with the RGB-D camera from many different angles). 
+
+There will be 3 different "worlds". These can be found in the `config` directory of `pr2_robot`, and are named `pick_list_1.yaml`, `pick_list_2.yaml`, and `pick_list_3.yaml`.
+
+Pick out the models from there (should be 8 models)and put their names into the `models` dictionary of `capture_features.py`. Then, set the number of random orientations each model will be exposed to in the `for loop`. I used `80` for higher accuracy. Lastly, change the very last line of the script to make sure my new feature set is not confused with previous ones. Set it to: `training_set_worlds123.sav`
+
+We're now ready to capture our objects' features. Launch our handy `sensor_stick` Gazebo environment with:
+```sh
+$ roslaunch sensor_stick training.launch
+```
+Now, change the directory to where you want the feature set `training_set_worlds123.sav` to save. I put mine here:
+```sh
+$ cd ~/catkin_ws/src/RoboND-Perception-Project/pr2_robot/scripts/
+```
+Then, run the feature capture script:
+```sh
+rosrun sensor_stick capture_features.py
+```
+This will take some time. Mine took ~20 minutes. 
+
+Once finished, you will have your features saved in that directory. We'll be using them in the next step when we train our classifier!
+
+###
+##### Train the SVM Classifier
+We're now going to train our classifier on the features we've extracted from our objects. `train_svm.py` is going to do this for us, and is located where your directory should still be pointing:
+```sh
+$ cd ~/catkin_ws/src/RoboND-Perception-Project/pr2_robot/scripts/
+```
+Open `train_svm.py` and make sure line ~39 or so is loading the correct feature data we just produced:
+```py
+training_set = pickle.load(open('training_set_worlds123.sav', 'rb'))
+```
+Then, we're going to check our SVC kernel is set to `linear`:
+```py
+clf = svm.SVC(kernel='linear')
+```
+`rbf` and `sigmoid` also work well, but with 80 iterations, I've found linear to have the highest accuracy (93%).
+
+Now, from this same directory, run the script:
+```sh
+$ rosrunh sensor_stick train_svm.py
+```
+Two confusion matrices will be generated--one will be a normalized version. Prior to any training, I had a very confused confusion matrix that looked like this:
+###
+![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/initial_confusion_matrix.png?raw=true)
+
+###
+***If you did the above steps correctly, it should look closer to this:***
+###
+###
+![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/linear_conf_matrix_n80_accur93.png?raw=true)
+***This is a better looking confusion matrix*** 
+
+###
+###
+##### Check the Labeling in RViz
+###
+Now, we can check the labeling of objects in RViz. Exit out of any existing Gazebo or RViz sessions, and type in a terminal:
+```sh
+roslaunch pr2_robot pick_place_project.launch
+```
+Give it a moment to boot up, then change to our favorite directory, and run our `project_template.py` code:
+```sh
+$ cd ~/catkin_ws/src/RoboND-Perception-Project/pr2_robot/scripts/
+$ rosrun pr2_robot project_template.py
+```
+It's important to run `project_template.py` from this directory because that is where `model.sav` lives; which is the output of our training of the Support Vector Machine classifier.
+
+
 
 
 (***README IN PROGRESS***)
