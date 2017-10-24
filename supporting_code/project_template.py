@@ -167,14 +167,13 @@ def pcl_callback(pcl_msg):
 	# TODO - set proper names    ### Convert PCL data to ROS messages
     ros_cloud_objects = pcl_to_ros(extracted_outliers) 
     ros_cloud_table = pcl_to_ros(extracted_inliers)
-    ros_cluster_cloud = pcl_to_ros(cluster_cloud)
+    # ros_cluster_cloud = pcl_to_ros(cluster_cloud)
 
 
 	# TODO   set names ### Publish ROS messages
     pcl_objects_pub.publish(ros_cloud_objects)
     pcl_table_pub.publish(ros_cloud_table)
-    pcl_cluster_pub.publish(ros_cluster_cloud)
-
+    # pcl_cluster_pub.publish(ros_cluster_cloud)
 
 
 	# Exercise-3 TODOs: 
@@ -213,42 +212,93 @@ def pcl_callback(pcl_msg):
         do.cloud = ros_cluster
         detected_objects.append(do)
 
+    # Publish the list of detected objects
     rospy.loginfo('Detected {} objects: {}'.format(len(detected_objects_labels), detected_objects_labels))
 
-    # Publish the list of detected objects
     # This is the output you'll need to complete the upcoming project!
     detected_objects_pub.publish(detected_objects)
-
 
     # Suggested location for where to invoke your pr2_mover() function within pcl_callback()
     # Could add some logic to determine whether or not your object detections are robust
     # before calling pr2_mover()
     try:
-        pr2_mover(detected_objects_list)
+        pr2_mover(detected_objects)
     except rospy.ROSInterruptException:
         pass
+
+
 
 
 # function to load parameters and request PickPlace service
 def pr2_mover(object_list):
 
-    # TODO: Initialize variables
+    # Set which world we're in
+    test_scene_num = Int32()
+    test_scene_num.data = 1 
 
-    # TODO: Get/Read parameters
+    # Lets start by getting the pick list!
+    # Retrieve the picklist from the parameter server (YAML files)
+    object_list_param = rospy.get_param('/object_list')
 
-    # TODO: Parse parameters into individual variables
+    # Let's determine the location of the red and green boxes
+    box_param = rospy.get_param('/dropbox')
 
-    # TODO: Rotate PR2 in place to capture side tables for the collision map
+    # We'll loop through the two boxes
+    for i in range(0, len(box_param)):
+        box_name = box_param[i]['name']
+        box_group = box_param[i]['group']
+        box_position = box_param[i]['position']
 
-    # TODO: Loop through the pick list
+    # Get the PointCloud for a given object and obtain it's centroid
+    # Compare the label with the pick list and provide the centroid
+    labels = []
+    centroids = [] # to be list of tuples (x, y, z)
+    for object in object_list:
+        labels.append(object.label)
+        points_arr = ros_to_pcl(object.cloud).to_array()
+        temp = np.mean(points_arr, axis=0)[:3]
+        centroids.append(np.asscalar(temp))
 
-        # TODO: Get the PointCloud for a given object and obtain it's centroid
 
-        # TODO: Create 'place_pose' for the object
 
-        # TODO: Assign the arm to be used for pick_place
+    # The way it will actually work within your code is that you'll iterate over each item in the pick list, 
+    # see whether you found it in your perception analysis, then if you did, populate the pick_pose message with the centroid. 
+    # Since you'll do this with each object one at a time, a convenient way to save the messages 
+    # for each object is in a list of dictionaries. 
 
-        # TODO: Create a list of dictionaries (made with make_yaml_dict()) for later output to yaml format
+
+    # With each iteration over the pick list, you can create a dictionary with the above 
+    # function and then generate a list of dictionaries containing all your ROS service request messages.ie.e
+    dict_list = []
+    for i in range(0, len(object_list_param)):
+        object_name = String()
+        object_name = object_list_param[i]['name']
+        object_group = object_list_param[i]['group']
+
+        # arm_name - Right for Green Box, Left for Red Box
+        arm_name = String()
+        place_pose = Pose()
+
+        if object_group == 'red':
+            arm_name = 'left'
+            place_pose = box_position[0]
+        else:
+            arm_name = 'right'
+            place_pose = box_position[1]    
+
+
+
+
+
+        # pick_pose
+        pick_pose = Pose()
+        pick_pose.data = centroids[i] # TODO
+
+
+
+        # Populate various ROS messages
+        yaml_dict = make_yaml_dict(test_scene_num, arm_name, object_name, pick_pose, place_pose)
+        dict_list.append(yaml_dict)
 
         # Wait for 'pick_place_routine' service to come up
         rospy.wait_for_service('pick_place_routine')
@@ -256,15 +306,17 @@ def pr2_mover(object_list):
         try:
             pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
 
-            # TODO: Insert your message variables to be sent as a service request
-            resp = pick_place_routine(TEST_SCENE_NUM, OBJECT_NAME, WHICH_ARM, PICK_POSE, PLACE_POSE)
+            # Insert your message variables to be sent as a service request
+            resp = pick_place_routine(test_scene_num, object_name, arm_name, pick_pose, place_pose)
 
             print ("Response: ",resp.success)
 
         except rospy.ServiceException, e:
             print "Service call failed: %s"%e
 
-    # TODO: Output your request parameters into output yaml file
+
+    # Output your request parameters into output yaml file
+    send_to_yaml("output_1.yaml", dict_list)
 
 
 
@@ -278,7 +330,7 @@ if __name__ == '__main__':
 
     # Create Publishers
     # Publish to verify our above pcl_sub worked
-    pcl_cluster_pub = rospy.Publisher("/pcl_world", PointCloud2, queue_size=1)
+    # pcl_cluster_pub = rospy.Publisher("/pcl_world", PointCloud2, queue_size=1)
     # Publishers for the objects and the table
     pcl_objects_pub = rospy.Publisher("/pcl_objects", PointCloud2, queue_size=1)
     pcl_table_pub = rospy.Publisher("/pcl_table", PointCloud2, queue_size=1)
@@ -286,7 +338,6 @@ if __name__ == '__main__':
     object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
     detected_objects_pub = rospy.Publisher("/detected_objects", DetectedObjectsArray, queue_size=1)
     
-
     # Load Model From disk
     model = pickle.load(open('model.sav', 'rb'))
     clf = model['classifier']
