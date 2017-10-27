@@ -17,17 +17,17 @@
 
 ##### Specifically, the objectives of this project are to:
 
-**1.** 
+**1.** Have the PR2 image its world
 ###
-**2.** Maneuver the PR2
+**2.** Identify objects from the pick list
 ###
-**3.** Grasp the object
+**3.** Maneuver the PR2 towards the objects
 ###
-**4.** 
+**4.** Grasp the object
 ###
-**5.** 
+**5.** Maneuver the PR2 towards the object's destination bin
 ###
-**6.** Sucessfully place the object in the destination bin
+**6.** Sucessfully place the object in the bin
 ###
 ###
 
@@ -149,7 +149,6 @@ We can model the table in our dataset as a plane, and remove it from the pointcl
 ###### Extracting Indices - Inliers and Outliers
 
 ###
-
 Inliers
 `extracted_inliers = cloud_filtered.extract(inliers, negative=False)`
 
@@ -167,29 +166,31 @@ Outliers
 
 ###
 
-Used to statistically remove noise from the image.
+This filter is used to statistically remove noise from the image. Here's [a cool video showing the removal in 3 dimensions](https://youtu.be/RjQPp2_GRnI)
 
 
 Much like the previous filters, we start by creating a filter object: 
 ```
 outlier_filter = cloud_filtered.make_statistical_outlier_filter()
 ```
-Set the number of neighboring points to analyze for any given point
+Set the number of neighboring points to analyze for any given point:
 ```
 outlier_filter.set_mean_k(50)
 ```
-Set threshold scale factor
+Set threshold scale factor:
 ```
 x = 1.0
 ```
-Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered outlier
+Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered an outlier
 ```
 outlier_filter.set_std_dev_mul_thresh(x)
 ```
-Finally call the filter function for magic
+Finally call the filter function
 ```
 cloud_filtered = outlier_filter.filter()
 ```
+
+
 
 ###
 ###
@@ -331,7 +332,7 @@ $ rosrun sensor_stick train_svm.py
 As you can see, this is not a good confusion matrix. That's because the functions `compute_color_histograms()` and `compute_normal_histograms()`, in the file `features.py` is not appropriately filled out. 
 ###
 You can find `features.py` in the directory:
-```
+```sh
 ~/catkin_ws/src/sensor_stick/src/sensor_stick/
 ```
 First up, we'll alter the `compute_color_histograms()` function, which will do RGB color analysis on each point of the point cloud.
@@ -394,15 +395,13 @@ def compute_normal_histograms(normal_cloud):
 
     nbins=32
     bins_range=(0,256)
-    # TODO: Compute histograms of normal values (just like with color)
+    # Compute histograms of normal values (just like with color)
 
     # Compute histograms
     x_hist = np.histogram(norm_x_vals, bins=nbins, range=bins_range)
     y_hist = np.histogram(norm_y_vals, bins=nbins, range=bins_range)
     z_hist = np.histogram(norm_z_vals, bins=nbins, range=bins_range)
     
-    # TODO: Concatenate and normalize the histograms
-    # Extract the features
     # Concatenate and normalize the histograms
     hist_features = np.concatenate((x_hist[0], y_hist[0], z_hist[0])).astype(np.float64)
     normed_features = hist_features / np.sum(hist_features)  
@@ -425,10 +424,10 @@ Give it a minute or so to go through all 7 objects. Then:
 $ rosrun sensor_stick train_svm.py
 ```
 The outputted confusion matrix should be better than the previous one. But there are still strategies to improve:
-**- Convert RGB to HSV**
-**- Compute features for a larger set of random orientations of the objects**
-**- Try different binning schemes with the histogram(32,64, etc)**
-**- Modify the SVM parameters(kernel, regularization, etc)**
+- **Convert RGB to HSV**
+- **Compute features for a larger set of random orientations of the objects**
+- **Try different binning schemes with the histogram(32,64, etc)**
+- **Modify the SVM parameters(kernel, regularization, etc)**
 ###
 
 To modify how many times each object is spawned randomly, look for the for loop in `capture_features.py` that begins with for i in range(5):. Increase this value to increase the number of times you capture features for each object.
@@ -459,7 +458,7 @@ And at `80` orientations per object:
 - **95%** with SVM kernel=linear, orientations=80
 
 Make sure you are in the directory where `model.sav` is located!
-```
+```sh
 $ roslaunch sensor_stick robot_spawn.launch
 $ ./object_recognition.py
 ```
@@ -535,7 +534,7 @@ $ cd ~/catkin_ws/src/RoboND-Perception-Project/pr2_robot/scripts/
 ```
 Then, run the feature capture script:
 ```sh
-rosrun sensor_stick capture_features.py
+$ rosrun sensor_stick capture_features.py
 ```
 This will take some time. Mine took ~20 minutes. 
 
@@ -578,7 +577,7 @@ Two confusion matrices will be generated--one will be a normalized version. Prio
 ###
 Now, we can check the labeling of objects in RViz. Exit out of any existing Gazebo or RViz sessions, and type in a terminal:
 ```sh
-roslaunch pr2_robot pick_place_project.launch
+$ roslaunch pr2_robot pick_place_project.launch
 ```
 Give it a moment to boot up, then change to our favorite directory, and run our `project_template.py` code:
 ```sh
@@ -586,8 +585,135 @@ $ cd ~/catkin_ws/src/RoboND-Perception-Project/pr2_robot/scripts/
 $ rosrun pr2_robot project_template.py
 ```
 It's important to run `project_template.py` from this directory because that is where `model.sav` lives; which is the output of our training of the Support Vector Machine classifier.
+###
+***You've now completed your perception pipeline!***
+###
+#### Output yaml Files
+We now need to load each of the three worlds, and determine which objects to look for once we're there. The launch file `pick_place_project.launch` in `pr2_robot/launch` at lines `13` and `39` have world parameters you need to alter.
+
+We now need to obtain our picklists from `.yaml` files that are located here: `/pr2_robot/config/`
+They are called: `pick_list_1.yaml`, `pick_list_2.yaml`, and `pick_list_3.yaml`. 
+
+For instance, `pick_list_1.yaml` looks like this:
+```
+object_list:
+  - name: biscuits
+    group: green
+  - name: soap
+    group: green
+  - name: soap2
+    group: red
+```
+
+#### Running the Project
+###
+For ease of use, I've built two separate `shell` scripts that run the above lines: `launch.sh` starts up Gazebo, and `run.sh` runs our `project_template.py` script. They can be invoked from the terminal with:
+```sh
+$ ./launch
+```
+Give the PR2 a moment... And open a new terminal window, and type:
+```
+$ ./run.sh
+```
+You'll be prompted in one of the terminal windows to click **continue** or **next** in RViz.
+###
+##### World 1 
+![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/world1_objects_identified.png?raw=true)
+###
+![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/world1_complete.png?raw=true)
+###
+##### World 2
+###
+
+##### World 3
+![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/world3_objects_identified.png?raw=true)
+
+### Debugging
+
+##### Improving Real-time Factor in Gazebo
+In the directory `pr2_robot/worlds/`, you'll find the `test#.world` files. Search for "physics", and find the block of code below:
+```xml
+    <physics name='default_physics' default='0' type='ode'>
+      <max_step_size>0.005</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+```
+This controls the rate of the Gazebo world, and since I was experiencing run-time rates of about `0.2`, I needed to increase it by a factor of 5 to get to 1.0; so I set the `max_step_size` to `0.005` from `0.001`. The product of `max_step_size` and `real_time_update_rate` gives you the expected real time factor.
+
+##### Improving Accuracy
+After some issues with object labeling and recognition, I decided to re-train on the 8 objects, but this time for **200** iterations each 
+![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/linear_conf_matrix_n200_accur97.png?raw=true)
+###
+##### Improving Grasping
+Due to us running a Virtual instance of Linux Ubuntu, our PR2 doesn't always successfully grasp items. Let's put in a delay like we did in project2.
+
+`/pr2_robot/src/` has a c++ file named `pr2_pick_place_server.cpp`. Line `222` sets the delay of the `right gripper` and line `311` sets the delay after closing the `left gripper`. At default, these are set to `3.0` seconds, but let's bump that up to `8.0`.
+
+Because we changed one of the build files, we have to re-make the project. Close all terminal windows, open a new one, and type: 
+```sh
+$ cd ~/catkin_ws/`
+$ catkin_make
+```
+##### Improving Classification
+
+Classifier wasn't recognizing the books
+Voxel DownSampling
+```
+LEAF_SIZE = 0.003
+```
+Euclidean Clustering
+```
+    ec.set_ClusterTolerance(0.01)
+    ec.set_MinClusterSize(1000)
+    # Refering to the minimum and maximum number of points that make up an object's cluster
+    ec.set_MaxClusterSize(100000)
+```
+
+
+Logic for moving onto the pr2_function
+```py
+    object_list_param = rospy.get_param('/object_list')
+    pick_list_objects = []
+    for i in range(len(object_list_param)):
+        pick_list_objects.append(object_list_param[i]['name'])
+
+    print "\n"  
+    print "Pick List includes: "
+    print pick_list_objects
+    print "\n"
+    pick_set_objects = set(pick_list_objects)
+    detected_set_objects = set(detected_objects_labels)
 
 
 
+
+    if detected_set_objects <= pick_set_objects:
+        try:
+            pr2_mover(detected_objects)
+        except rospy.ROSInterruptException:
+            pass
+```
+##### Improving Re-Classification
+After much experience in the simulated robot world, I found that objects would get knocked around when the robot would plan an overly complex motion path. Therefore, objects would not be located at the initial centroids that were calculated. Although computationally more expensive, I decided to relocate the centroid `for loop` to be inside of 
+
+```
+for i in range(0, len(object_list_param)):
+    for object in object_list:
+        labels.append(object.label)
+        points_arr = ros_to_pcl(object.cloud).to_array()
+        temp = np.mean(points_arr, axis=0)[:3]
+        centroids.append(temp)
+```
+##### Improving Drop Location
+Often, the `biscuits` object will get hung up on the front edge of the `green box`. We can solve this by changing the centroids of the boxes. These are located in `/pr2_robot/config/dropbox.yaml`
+
+Open up this yaml file, and find the the `x` values. Since these are both `0` at default, we can assume this is the axis we need to alter. Let's change both boxes x-values to `-0.1` meters. Giving us: `[-0.1, 0.71, 0.605]` for the left box, and `[-0.1, -0.71, 0.605]` for the right, green box. This seems to help our robot hit the center of the box!
+
+##### Horizontal Pass through Filter
+As you can see from the image below, our robot is placing the object location of the glue to be near the `green dropbox`
+![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/horiz_pass_through_filter.png?raw=true)
+###
+Clearly, this is incorrect, and means we need to apply a pass through filter along the horizontal axis. But is this `X` or `Y`? Well from the `dropbox.yaml` file above, we know this is the `Y-axis`, because the dropboxes are located at `-0.71` and `0.71`. Let's cut this down to `-0.50` and `0.50`
 
 (***README IN PROGRESS***)
