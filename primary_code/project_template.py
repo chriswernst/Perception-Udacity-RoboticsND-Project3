@@ -46,6 +46,7 @@ def send_to_yaml(yaml_filename, dict_list):
     with open(yaml_filename, 'w') as outfile:
         yaml.dump(data_dict, outfile, default_flow_style=False)
 
+
 # Callback function for your Point Cloud Subscriber
 def pcl_callback(pcl_msg):
 
@@ -62,7 +63,8 @@ def pcl_callback(pcl_msg):
     # Choose a voxel (also known as leaf) size
     # Note: this (1) is a poor choice of leaf size   
     # Experiment and find the appropriate size!
-    LEAF_SIZE = 0.01   
+    LEAF_SIZE = 0.003
+
 
     # Set the voxel (or leaf) size  
     vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
@@ -70,36 +72,48 @@ def pcl_callback(pcl_msg):
     # Call the filter function to obtain the resultant downsampled point cloud
     cloud_filtered = vox.filter()
 
-	### Statistical Outlier Removal Filter
-	# Much like the previous filters, we start by creating a filter object: 
+    ### Statistical Outlier Removal Filter
+    # Much like the previous filters, we start by creating a filter object: 
     outlier_filter = cloud_filtered.make_statistical_outlier_filter()
 
-	# Set the number of neighboring points to analyze for any given point
+    # Set the number of neighboring points to analyze for any given point
     outlier_filter.set_mean_k(50)
 
-	# Set threshold scale factor
+    # Set threshold scale factor
     x = 1.0
 
-	# Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered outlier
+    # Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered outlier
     outlier_filter.set_std_dev_mul_thresh(x)
 
-	# Finally call the filter function for magic
+    # Finally call the filter function for magic
     cloud_filtered = outlier_filter.filter()
 
 
     ### PassThrough Filter
-    # Create a PassThrough filter object.
-    passthrough = cloud_filtered.make_passthrough_filter()
+    # Create a PassThrough filter object first across the Z axis
+    passThroughZ = cloud_filtered.make_passthrough_filter()
 
     # Assign axis and range to the passthrough filter object.
     filter_axis = 'z'
-    passthrough.set_filter_field_name(filter_axis)
-    axis_min = 0.2
+    passThroughZ.set_filter_field_name(filter_axis)
+    axis_min = 0.6
     axis_max = 1.1
-    passthrough.set_filter_limits(axis_min, axis_max)
+    passThroughZ.set_filter_limits(axis_min, axis_max)
 
     # Finally use the filter function to obtain the resultant point cloud. 
-    cloud_filtered = passthrough.filter()
+    cloud_filtered = passThroughZ.filter()
+
+    ## Now, Create a PassThrough filter object across the Y axis
+    passThroughY = cloud_filtered.make_passthrough_filter()
+    # Assign axis and range to the passthrough filter object.
+    filter_axis = 'y'
+    passThroughY.set_filter_field_name(filter_axis)
+    axis_min = -0.5
+    axis_max = 0.5
+    passThroughY.set_filter_limits(axis_min, axis_max)
+
+    # Finally use the filter function to obtain the resultant point cloud. 
+    cloud_filtered = passThroughY.filter()
 
 
     ### RANSAC Plane Segmentation
@@ -135,10 +149,10 @@ def pcl_callback(pcl_msg):
     # Set tolerances for distance threshold 
     # as well as minimum and maximum cluster size (in points)
     # Your task is to experiment and find values that work for segmenting objects.
-    ec.set_ClusterTolerance(0.02)
-    ec.set_MinClusterSize(100)
+    ec.set_ClusterTolerance(0.01)
+    ec.set_MinClusterSize(500)
     # Refering to the minimum and maximum number of points that make up an object's cluster
-    ec.set_MaxClusterSize(25000)
+    ec.set_MaxClusterSize(100000)
     # Search the k-d tree for clusters
     ec.set_SearchMethod(tree)
     # Extract indices for each of the discovered clusters
@@ -164,19 +178,19 @@ def pcl_callback(pcl_msg):
     cluster_cloud.from_list(color_cluster_point_list)
 
 
-	# TODO - set proper names    ### Convert PCL data to ROS messages
+    # TODO - set proper names    ### Convert PCL data to ROS messages
     ros_cloud_objects = pcl_to_ros(extracted_outliers) 
     ros_cloud_table = pcl_to_ros(extracted_inliers)
-    # ros_cluster_cloud = pcl_to_ros(cluster_cloud)
+    ros_cluster_cloud = pcl_to_ros(cluster_cloud)
 
 
-	# TODO   set names ### Publish ROS messages
+    # TODO   set names ### Publish ROS messages
     pcl_objects_pub.publish(ros_cloud_objects)
     pcl_table_pub.publish(ros_cloud_table)
-    # pcl_cluster_pub.publish(ros_cluster_cloud)
+    pcl_cluster_pub.publish(ros_cluster_cloud)
 
 
-	# Exercise-3 TODOs: 
+    # Exercise-3 TODOs: 
 
     # Classify the clusters! (loop through each detected cluster one at a time)
     detected_objects_labels = []
@@ -212,29 +226,49 @@ def pcl_callback(pcl_msg):
         do.cloud = ros_cluster
         detected_objects.append(do)
 
+    print "Trying to match the pick list with the objects detected..."
+    print "\n"
     # Publish the list of detected objects
     rospy.loginfo('Detected {} objects: {}'.format(len(detected_objects_labels), detected_objects_labels))
 
     # This is the output you'll need to complete the upcoming project!
     detected_objects_pub.publish(detected_objects)
 
+    object_list_param = rospy.get_param('/object_list')
+    pick_list_objects = []
+    for i in range(len(object_list_param)):
+        pick_list_objects.append(object_list_param[i]['name'])
+
+    print "\n"  
+    print "Pick List includes: "
+    print pick_list_objects
+    print "\n"
+    pick_set_objects = set(pick_list_objects)
+    detected_set_objects = set(detected_objects_labels)
+
+
+    if detected_set_objects == pick_set_objects:
+        try:
+            pr2_mover(detected_objects)
+        except rospy.ROSInterruptException:
+            pass
+
+
     # Suggested location for where to invoke your pr2_mover() function within pcl_callback()
     # Could add some logic to determine whether or not your object detections are robust
     # before calling pr2_mover()
-    try:
-        pr2_mover(detected_objects)
-    except rospy.ROSInterruptException:
-        pass
-
 
 
 
 # function to load parameters and request PickPlace service
 def pr2_mover(object_list):
-
-    # Set which world we're in
+    # Set which world we're in and our output file name. Make sure to also change the testworld# in pick_place_project.launch
+    # at lines 13, 39
     test_scene_num = Int32()
-    test_scene_num.data = 2 
+    test_scene_num.data = 2
+    outputFileName = "output_2.yaml"
+
+
 
     # Lets start by getting the pick list!
     # Retrieve the picklist from the parameter server (YAML files)
@@ -242,7 +276,6 @@ def pr2_mover(object_list):
 
     # Let's determine the location of the red and green boxes
     box_param = rospy.get_param('/dropbox')
-
 
     box_name = []
     box_group = []
@@ -254,15 +287,10 @@ def pr2_mover(object_list):
         box_position.append(box_param[i]['position'])
 
 
+
     # Get the PointCloud for a given object and obtain it's centroid
     # Compare the label with the pick list and provide the centroid
-    labels = []
-    centroids = [] # to be list of tuples (x, y, z)
-    for object in object_list:
-        labels.append(object.label)
-        points_arr = ros_to_pcl(object.cloud).to_array()
-        temp = np.mean(points_arr, axis=0)[:3]
-        centroids.append(temp)
+
 
     # The way it will actually work within your code is that you'll iterate over each item in the pick list, 
     # see whether you found it in your perception analysis, then if you did, populate the pick_pose message with the centroid. 
@@ -274,6 +302,16 @@ def pr2_mover(object_list):
     # function and then generate a list of dictionaries containing all your ROS service request messages.ie.e
     dict_list = []
     for i in range(0, len(object_list_param)):
+        
+
+        labels = []
+        centroids = [] # to be list of tuples (x, y, z)
+        for object in object_list:
+            labels.append(object.label)
+            points_arr = ros_to_pcl(object.cloud).to_array()
+            temp = np.mean(points_arr, axis=0)[:3]
+            centroids.append(temp)
+
         object_name = String()
         # This is getting the first object name and box from the picklist
 
@@ -299,12 +337,18 @@ def pr2_mover(object_list):
         # pick_pose
         pick_pose = Pose()
         desired_object = object_list_param[i]['name']
+        print "\n\nPicking up ", desired_object, "\n\n"
+        print "\n\nPutting in ", object_group, "\n\n"
+
 
         # Match desired object with the centroid list/labels
-    	labelPosition = labels.index(desired_object)
-    	pick_pose.position.x = np.asscalar(centroids[labelPosition][0])
-    	pick_pose.position.y = np.asscalar(centroids[labelPosition][1])
-    	pick_pose.position.z = np.asscalar(centroids[labelPosition][2])
+        try:
+            labelPosition = labels.index(desired_object)
+            pick_pose.position.x = np.asscalar(centroids[labelPosition][0])
+            pick_pose.position.y = np.asscalar(centroids[labelPosition][1])
+            pick_pose.position.z = np.asscalar(centroids[labelPosition][2])
+        except ValueError:
+            continue
 
         # Populate various ROS messages
         yaml_dict = make_yaml_dict(test_scene_num, arm_name, object_name, pick_pose, place_pose)
@@ -326,7 +370,7 @@ def pr2_mover(object_list):
 
 
     # Output your request parameters into output yaml file
-    send_to_yaml("output_2.yaml", dict_list)
+    send_to_yaml(outputFileName, dict_list)
 
 
 
@@ -340,7 +384,7 @@ if __name__ == '__main__':
 
     # Create Publishers
     # Publish to verify our above pcl_sub worked
-    # pcl_cluster_pub = rospy.Publisher("/pcl_world", PointCloud2, queue_size=1)
+    pcl_cluster_pub = rospy.Publisher("/pcl_world", PointCloud2, queue_size=1)
     # Publishers for the objects and the table
     pcl_objects_pub = rospy.Publisher("/pcl_objects", PointCloud2, queue_size=1)
     pcl_table_pub = rospy.Publisher("/pcl_table", PointCloud2, queue_size=1)

@@ -623,6 +623,7 @@ You'll be prompted in one of the terminal windows to click **continue** or **nex
 ![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/world1_complete.png?raw=true)
 ###
 ##### World 2
+![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/world2_objects_identified.png?raw=true)
 ###
 
 ##### World 3
