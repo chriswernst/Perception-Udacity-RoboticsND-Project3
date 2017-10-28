@@ -46,7 +46,7 @@ The code driving this project and interacting with ROS can be found at `project_
 
 *Quick note on naming convention:* `THIS_IS_A_CONSTANT` *and* `thisIsAVariable`
 
-This **README** is broken into the following sections: **Environment Setup, Code Analysis, and Debugging**
+This **README** is broken into the following sections: **Environment Setup, Code Analysis, and Debugging**.
 
 ###
 ###
@@ -101,7 +101,7 @@ If prompted, the Linux system password is `robo-nd`
 
 ##### OpenCV
 
-Although we won't be using OpenCV to calibrate our camera(we'll be using a ROS package), the process for doing so with OpenCV is outlined here:
+Quick note on **openCV**: although we won't be using OpenCV to calibrate our camera(we'll be using a ROS package), the process for doing so with OpenCV is outlined here:
 
 **1.** Use `cv2.findChessboardCorners()` to find corners in chessboard images and aggregate arrays of image points (2D image plane points) and object points (3D world points) .
 **2.** Use the OpenCV function `cv2.calibrateCamera()` to compute the calibration matrices and distortion coefficients.
@@ -115,6 +115,8 @@ OpenCV functions for calibrating camera: `findChessboardCorners()` and `drawChes
 
 ###
 
+First, we're going to walk through some filtering techniques that will help give us only the parts of the point cloud we're intrested in.
+
 We'll harness some filters from the [Point Cloud Library](http://www.pointclouds.org/)
 
 ###### VoxelGrid Downsampling Filter
@@ -126,6 +128,7 @@ We'll harness some filters from the [Point Cloud Library](http://www.pointclouds
 ###
 
 Downsampling is used to decrease the density of the pointcloud that is output from the RGB-D camera. This is done because the very feature rich pointclouds can be quite computationally expensive.
+*Downsampling* can be thought of decreasing the resolution of a three dimensional point cloud.
 
 `RANSAC.py` contains the Voxel Downsampling Code.
 
@@ -134,26 +137,28 @@ Downsampling is used to decrease the density of the pointcloud that is output fr
 ###
 
 We'll use Pass Through Filtering to trim down our point cloud space along specified axes, in order to decrease the sample size. We will allow a specific region to *Pass Through*. This is called the *Region of Interest*.
-
+*Pass Through Filtering* can be thought of as cropping a three dimensional space across one or many of the dimensions.
 ###
 
 ###### RANSAC Plane Fitting
 
 ###
 
-We can model the table in our dataset as a plane, and remove it from the pointcloud using `Random Sample Consensus` or `RANSAC` algorithm
+We can model the table in our dataset as a plane, and remove it from the pointcloud using `Random Sample Consensus` or `RANSAC` algorithm.
+
+As you can see, we selected the horizontal plane below, which was the table our target objects were sitting on.
 
 ![alt text](https://d17h27t6h515a5.cloudfront.net/topher/2017/July/595d3ec9_screen-shot-2017-07-05-at-12.31.15-pm/screen-shot-2017-07-05-at-12.31.15-pm.png)
 
 
 ###### Extracting Indices - Inliers and Outliers
-
+Once we've determined where our table is located, we can create two separate point clouds: one for the table(inliers), and one for the objects beyond(outliers).
 ###
-Inliers
+*Inliers*
 `extracted_inliers = cloud_filtered.extract(inliers, negative=False)`
 
 ###
-Outliers
+*Outliers*
 `extracted_outliers = cloud_filtered.extract(inliers, negative=True)`
 
 ###
@@ -166,7 +171,7 @@ Outliers
 
 ###
 
-This filter is used to statistically remove noise from the image. Here's [a cool video showing the removal in 3 dimensions](https://youtu.be/RjQPp2_GRnI)
+This filter is used to statistically remove noise from the image. Here's [a cool video showing the removal in 3 dimensions.](https://youtu.be/RjQPp2_GRnI)
 
 
 Much like the previous filters, we start by creating a filter object: 
@@ -207,7 +212,7 @@ K-Means Clustering is an appropriate clustering algorithm if you are aware of yo
 
 Remember, with K-Means, we:
 
-**1.** Choose the number of k-means
+**1.** Choose the number of k-means (the number of clusters to look for)
 **2.** Define the convergence / termination criteria (stability of solution / number of iterations)
 **3.** Select the initial centroid locations, or randomly generate them
 **4.** Calculate the distance of each datapoint to each of the centroids
@@ -221,12 +226,12 @@ Remember, with K-Means, we:
 
 ###
 
-If you are unsure of the number of clusters, it is best to use a different clustering solution! Such as DBSCAN!
+If you are unsure of the number of clusters, it is best to use a different clustering solution! Such as DBSCAN...
 
 ###
 
 ###### DBSCAN Algorithm *(Density-Based Spatial Clustering of Applications with Noise)*
-*Sometimes called Euclidean Clustering*
+*Sometimes called* ***Euclidean Clustering***
 
 ###
 
@@ -241,6 +246,9 @@ DBSCAN is a nice alternative to k-means when you don't know how many clusters to
 
 DBSCAN datapoints **do not have to be spatial data; they can be color data, intensity values, or other numerical features!** This means we can cluster not only based upon proximity, but we can cluster similarly colored objects!
 
+###
+###
+###
 ##### Run the VM to test our filtering and segmentation code
 Downsampling, Passthrough, RANSAC plane fitting, extract inliers/outliers
 ```sh
@@ -299,19 +307,22 @@ These **surface normal** histograms correspond to the following shapes:
 
 ![alt text](https://d17h27t6h515a5.cloudfront.net/topher/2017/July/59737b6e_screen-shot-2017-07-22-at-9.20.22-am/screen-shot-2017-07-22-at-9.20.22-am.png)
 ###
-Scikit-Learn or `sklearn.svm.SVC` will help us implement the SVM algorithm. [Check this link out for documentation on scikit-learn](http://scikit-learn.org/stable/modules/classes.html#module-sklearn.svm)
+**Scikit-Learn** or `sklearn.svm.SVC` will help us implement the SVM algorithm. [Check this link out for documentation on scikit-learn](http://scikit-learn.org/stable/modules/classes.html#module-sklearn.svm)
 ###
 `svm.py` will house our SVM code and `generate_clusters.py` will help us create a random dataset.
 ```py
 svc = svm.SVC(kernel='linear').fit(X, y)
 ```
- The line above is the one doing the heavy lifting. The type of delineation can be changed. It must be one of ‘linear’, ‘poly’, ‘rbf’, ‘sigmoid’, ‘precomputed’ or a callable. [Read more here](http://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html).
+ The line above is the one doing the heavy lifting. The type of delineation can be changed. It must be one of *‘linear’, ‘poly’, ‘rbf’, ‘sigmoid’, ‘precomputed’* or a callable. [Read more here](http://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html).
 
 We also do some **SVM Image Classification**, and this can be found under `svm_image_classifer`.
-
-###### Recognition Exercise - Combining what we have learned!
 ###
-This is a very good(almost perfect) confusion matrix. Initially, ours will not come out this good.
+###
+###
+
+#### Recognition Exercise - Combining what we have learned!
+###
+This is a very good confusion matrix. Initially, ours will not come out this good.
 ![alt text](https://d17h27t6h515a5.cloudfront.net/topher/2017/August/59825df9_screen-shot-2017-08-02-at-4.18.53-pm/screen-shot-2017-08-02-at-4.18.53-pm.png)
 ###
 ```sh
@@ -377,7 +388,7 @@ def compute_color_histograms(cloud, using_hsv=False):
 ```
 ###
 ###
-Next, we'll add the histogram, compute features, concatenate them, and normalize them for the **surface normals** function `compute_normal_histograms`:
+Next, we'll add the histogram, compute features, concatenate them, and normalize them for the **surface normals** function `compute_normal_histograms`. Remember to aleter the range of the histograms here,as compared to the RGB histograms above. `0-255` was our range there, but here it will be from `-1 to 1`:
 
 ```py
 def compute_normal_histograms(normal_cloud):
@@ -394,7 +405,7 @@ def compute_normal_histograms(normal_cloud):
 
 
     nbins=32
-    bins_range=(0,256)
+    bins_range=(-1,1)
     # Compute histograms of normal values (just like with color)
 
     # Compute histograms
@@ -430,7 +441,7 @@ The outputted confusion matrix should be better than the previous one. But there
 - **Modify the SVM parameters(kernel, regularization, etc)**
 ###
 
-To modify how many times each object is spawned randomly, look for the for loop in `capture_features.py` that begins with for i in range(5):. Increase this value to increase the number of times you capture features for each object.
+To modify how many times each object is spawned randomly, look for the for loop in `capture_features.py` that begins with `for i in range(5):` Increase this loop to increase the number of times you capture random orientations for each object.
 
 To use HSV, find the line in `capture_features.py` where you're calling `compute_color_histograms()` and change the flag to `using_hsv=True`.
 
@@ -474,7 +485,7 @@ In the previous exercises, we have built out much of our perception pipeline. Bu
 ##### Filter and Segment the New Scene
 Since we have a new table environment, not all of our filters will be effective. I'm going to create a new file to replace `segmentation.py` that will help us filter and segment the new environment--I'll call it `pr2_segmentation.py`. Most of the code from `segmentaion.py` can just be copied over, but note the differences in the table height. This means we'll have to adjust the ***pass through filtering*** Z-axis minimum and maximum values. 
 
-For `axis-min` I'll try `0.2`(meters) and `1.1`(meters) for `axis-max`.
+For `axis-min` I'll try `0.6`(meters) and `1.1`(meters) for `axis-max`.
 
 We'll also want to publish our RGB-D camera data to a `ROS-topic` named `/pr2/world/points`. Following the syntax of other publishers/subscribers should help us out with this.
 
@@ -536,7 +547,7 @@ Then, run the feature capture script:
 ```sh
 $ rosrun sensor_stick capture_features.py
 ```
-This will take some time. Mine took ~20 minutes. 
+This will take some time. Mine took ~20 minutes running on a VM. 
 
 Once finished, you will have your features saved in that directory. We'll be using them in the next step when we train our classifier!
 
@@ -588,7 +599,7 @@ It's important to run `project_template.py` from this directory because that is 
 ###
 ***You've now completed your perception pipeline!***
 ###
-#### Output yaml Files
+##### Output yaml Files
 We now need to load each of the three worlds, and determine which objects to look for once we're there. The launch file `pick_place_project.launch` in `pr2_robot/launch` at lines `13` and `39` have world parameters you need to alter.
 
 We now need to obtain our picklists from `.yaml` files that are located here: `/pr2_robot/config/`
@@ -604,7 +615,10 @@ object_list:
   - name: soap2
     group: red
 ```
-
+We want to read from our `pick_list_X.yaml` files, but then write back to output `.yaml` files that capture the objects we've encountered and where they're located.
+###
+###
+###
 #### Running the Project
 ###
 For ease of use, I've built two separate `shell` scripts that run the above lines: `launch.sh` starts up Gazebo, and `run.sh` runs our `project_template.py` script. They can be invoked from the terminal with:
@@ -628,7 +642,9 @@ You'll be prompted in one of the terminal windows to click **continue** or **nex
 
 ##### World 3
 ![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/world3_objects_identified.png?raw=true)
-
+###
+###
+###
 ### Debugging
 
 ##### Improving Real-time Factor in Gazebo
@@ -656,38 +672,37 @@ Because we changed one of the build files, we have to re-make the project. Close
 $ cd ~/catkin_ws/`
 $ catkin_make
 ```
+###
+###
 ##### Improving Classification
 
-Classifier wasn't recognizing the books
-Voxel DownSampling
+Our classifier wasn't initially recognizing the books! We'll change a few features in filtering and clustering to make it perform better.
+
+**Voxel DownSampling**
 ```
 LEAF_SIZE = 0.003
 ```
-Euclidean Clustering
+**Euclidean Clustering**
 ```
     ec.set_ClusterTolerance(0.01)
-    ec.set_MinClusterSize(1000)
+    ec.set_MinClusterSize(200)
     # Refering to the minimum and maximum number of points that make up an object's cluster
-    ec.set_MaxClusterSize(100000)
+    ec.set_MaxClusterSize(50000)
 ```
 
-
-Logic for moving onto the pr2_function
+**Logic for when Object Recognition has Completed Successfully**
+We'll write some quick logic for when we've done a good enough job to start moving the PR2:
 ```py
     object_list_param = rospy.get_param('/object_list')
     pick_list_objects = []
     for i in range(len(object_list_param)):
         pick_list_objects.append(object_list_param[i]['name'])
-
-    print "\n"  
-    print "Pick List includes: "
+        
+    print "\nPick List includes: "
     print pick_list_objects
     print "\n"
     pick_set_objects = set(pick_list_objects)
     detected_set_objects = set(detected_objects_labels)
-
-
-
 
     if detected_set_objects <= pick_set_objects:
         try:
@@ -696,7 +711,7 @@ Logic for moving onto the pr2_function
             pass
 ```
 ##### Improving Re-Classification
-After much experience in the simulated robot world, I found that objects would get knocked around when the robot would plan an overly complex motion path. Therefore, objects would not be located at the initial centroids that were calculated. Although computationally more expensive, I decided to relocate the centroid `for loop` to be inside of 
+After much experience in the simulated robot world, I found that objects would get knocked around when the robot would plan an overly complex motion path. Therefore, objects would not be located at the initial centroids that were calculated. Although computationally more expensive, I decided to relocate the centroid `for loop` to be inside of the primary loop:
 
 ```
 for i in range(0, len(object_list_param)):
@@ -717,4 +732,7 @@ As you can see from the image below, our robot is placing the object location of
 ###
 Clearly, this is incorrect, and means we need to apply a pass through filter along the horizontal axis. But is this `X` or `Y`? Well from the `dropbox.yaml` file above, we know this is the `Y-axis`, because the dropboxes are located at `-0.71` and `0.71`. Let's cut this down to `-0.50` and `0.50`
 
-(***README IN PROGRESS***)
+#### Conclusion
+This has been a very comprehensive project--by far the most challenging in the course so far. To improve it further, it would be best to run the project in a native Linux enivronment, without a Virtual Machine --  due to much of the errors coming from lag, and the robot not fully grasping objects, or simply holding onto them for too long.
+There could also be more development done in detecting the `glue` object that appears in `world2` and `world3`. It is a small object, so many of the filters keeping the noise out would often exclude it from our analysis.
+
