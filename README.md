@@ -12,8 +12,8 @@
 ###### The goal of this project is to program a PR2 to identify and acquire target objects from a cluttered space and place them in a bin. The project is based on the 'Stow Task' portion of Amazon's Robotics Challenge.
 ###
 ###
-
-![alt text](https://d17h27t6h515a5.cloudfront.net/topher/2017/July/597a8731_screen-shot-2017-07-27-at-5.25.02-pm/screen-shot-2017-07-27-at-5.25.02-pm.png)
+***(Click the image for a video of the final result)***
+[![Click for the final project video](https://d17h27t6h515a5.cloudfront.net/topher/2017/July/597a8731_screen-shot-2017-07-27-at-5.25.02-pm/screen-shot-2017-07-27-at-5.25.02-pm.png)](https://youtu.be/v3lSNYWOniU)
 
 ##### Specifically, the objectives of this project are to:
 
@@ -643,6 +643,7 @@ You'll be prompted in one of the terminal windows to click **continue** or **nex
 ##### World 3
 ![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/world3_objects_identified.png?raw=true)
 ###
+![](https://github.com/chriswernst/Perception-Udacity-RoboticsND-Project3/blob/master/images/world3_complete.png?raw=true)
 ###
 ###
 ### Debugging
